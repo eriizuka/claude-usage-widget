@@ -1,5 +1,5 @@
 """Floating Claude usage widget. Drag to move, double-click to switch size, right-click to close."""
-import ctypes, datetime as dt, functools, glob, json, os, subprocess, sys, threading, time, tkinter as tk, traceback
+import ctypes, datetime as dt, functools, glob, json, locale, os, subprocess, sys, threading, time, tkinter as tk, traceback
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 PROJECTS = os.path.expanduser("~/.claude/projects")  # transcripts: tokens, cost and context
@@ -11,6 +11,14 @@ PRICES = {"opus-5-5": (4, 20, .2), "sonnet-5-5": (2, 10, .1), "haiku-5-5": (.1, 
           "opus": (5, 25, .5), "sonnet": (2, 10, .2), "haiku": (1, 5, .1), "fable": (10, 50, 1)}
 CTX, STALE_MIN, SS = 400_000, 30, 3  # context window, limits stale after 30 min, supersampling
 BG, TRACK, WH, DIM, MUT = (14, 15, 20), (44, 46, 56), (255, 255, 255), (201, 205, 214), (138, 143, 153)
+# UI text in the Windows display language (English when it is not one of these)
+STRINGS = {
+    "en": ("5 hours", "Week", "Context", "Today", "resets in", "no limits yet", "limits just now", "limits {} old", "double-click: compact", "W"),
+    "pt": ("5 horas", "Semana", "Contexto", "Hoje", "zera em", "limites sem dados", "limites agora", "limites de {} atrás", "2 cliques: compacto", "S"),
+    "es": ("5 horas", "Semana", "Contexto", "Hoy", "reinicia en", "sin datos de límites", "límites ahora", "límites de hace {}", "doble clic: compacto", "S")}
+try: LANG = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage(), "en")[:2]
+except Exception: LANG = "en"
+H5, WEEK, CONTEXT, TODAY, RESETS, NO_LIMITS, LIMITS_NOW, LIMITS_AGE, DBL, W = STRINGS.get(LANG, STRINGS["en"])
 try: ctypes.windll.shcore.SetProcessDpiAwareness(2)  # real pixels: no blur at 125%
 except Exception: pass
 
@@ -68,11 +76,11 @@ def until(t):
     s = max(0, t - time.time()) if isinstance(t, (int, float)) else None
     if s is None: return ""
     h = int(s // 3600)
-    return f"resets in {h // 24}d {h % 24}h" if h >= 24 else f"resets in {h}h{int(s % 3600 // 60):02d}"
+    return f"{RESETS} {h // 24}d {h % 24}h" if h >= 24 else f"{RESETS} {h}h{int(s % 3600 // 60):02d}"
 
 def age_text(m):
-    return "no limits yet" if m is None else "limits just now" if m < 1 else \
-        f"limits {m // 60}h{m % 60:02d} old" if m >= 60 else f"limits {m} min old"
+    return NO_LIMITS if m is None else LIMITS_NOW if m < 1 else \
+        LIMITS_AGE.format(f"{m // 60}h{m % 60:02d}" if m >= 60 else f"{m} min")
 
 @functools.lru_cache(maxsize=32)
 def font(px, bold=False):
@@ -169,9 +177,9 @@ class Widget:
         d.text((P, 22 * k), "Claude", font=font(15 * k, True), fill=WH, anchor="lm")
         cx, cy, a = W - P - 6 * k, 22 * k, 5 * k  # close X
         for p, q in (((cx - a, cy - a), (cx + a, cy + a)), ((cx - a, cy + a), (cx + a, cy - a))): d.line([p, q], fill=WH, width=int(2 * k))
-        rows = (("5 hours", D["h5"].get("utilization"), until(D["h5"].get("resets_at"))),
-                ("Week", D["wk"].get("utilization"), until(D["wk"].get("resets_at"))),
-                ("Context", D["cpct"], f"{(D['ctx'] or 0) / 1000:.0f}k / {CTX // 1000}k"))
+        rows = ((H5, D["h5"].get("utilization"), until(D["h5"].get("resets_at"))),
+                (WEEK, D["wk"].get("utilization"), until(D["wk"].get("resets_at"))),
+                (CONTEXT, D["cpct"], f"{(D['ctx'] or 0) / 1000:.0f}k / {CTX // 1000}k"))
         for i, (name, pct, extra) in enumerate(rows):
             y, txt = 56 * k + i * 44 * k, "—" if pct is None else f"{pct:.0f}%"
             d.text((P, y), name, font=font(10.5 * k), fill=DIM, anchor="lm")
@@ -181,15 +189,15 @@ class Widget:
             d.rounded_rectangle([P, by - bh / 2, W - P, by + bh / 2], radius=bh / 2, fill=TRACK)
             if pct: d.rounded_rectangle([P, by - bh / 2, max(P + (W - 2 * P) * min(pct, 100) / 100, P + bh), by + bh / 2], radius=bh / 2, fill=color(pct))
         y = 56 * k + 3 * 44 * k
-        d.text((P, y - 2 * k), f"Today  {D['tok'] / 1e6:.1f}M tokens  ·  ~US$ {D['cost']:.2f}", font=font(10 * k), fill=DIM, anchor="lm")
-        d.text((P, y + 15 * k), age_text(D["age"]) + "  ·  double-click: compact", font=font(9 * k), fill=MUT, anchor="lm")
+        d.text((P, y - 2 * k), f"{TODAY}  {D['tok'] / 1e6:.1f}M tokens  ·  ~US$ {D['cost']:.2f}", font=font(10 * k), fill=DIM, anchor="lm")
+        d.text((P, y + 15 * k), age_text(D["age"]) + "  ·  " + DBL, font=font(9 * k), fill=MUT, anchor="lm")
         return im
 
     def small(s, k, D):
         stale = D["age"] is None or D["age"] >= STALE_MIN
         im = Image.new("RGB", (int(176 * k), int((84 if stale else 68) * k)), BG); d = ImageDraw.Draw(im)
         r, w = 21 * k, int(5 * k)
-        for i, (lab, pct, lim) in enumerate((("5h", D["h5"].get("utilization"), 1), ("W", D["wk"].get("utilization"), 1), ("C", D["cpct"], 0))):
+        for i, (lab, pct, lim) in enumerate((("5h", D["h5"].get("utilization"), 1), (W, D["wk"].get("utilization"), 1), ("C", D["cpct"], 0))):
             cx, cy, old = 32 * k + i * 56 * k, 34 * k, lim and stale and pct is not None  # stale number: grey ring
             box = [cx - r, cy - r, cx + r, cy + r]
             d.ellipse(box, outline=TRACK, width=w)

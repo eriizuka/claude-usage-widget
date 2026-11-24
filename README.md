@@ -15,6 +15,7 @@ start a big task, not halfway through it. No dashboards to open, no commands to 
 - 👀 **Readable at a glance.** Green, yellow, red. Shrink it to three tiny rings or expand it for detail with a double-click.
 - 🪶 **Lightweight and out of the way.** Always on top, drag it anywhere, crisp on any display, starts with Windows.
 - 🔒 **100% local and private.** No account, no network calls, nothing leaves your computer.
+- 🌍 **Speaks your language.** Follows your Windows display language: English, Portuguese and Spanish.
 - ⚡ **Installs in one command.** Clone, run the installer, done.
 
 ## Requirements
