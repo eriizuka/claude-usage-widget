@@ -1,0 +1,14 @@
+{
+  "name": "claude-usage-widget",
+  "owner": { "name": "claude-usage-widget contributors" },
+  "description": "A floating desktop widget for your Claude usage.",
+  "version": "1.0.0",
+  "plugins": [
+    {
+      "name": "usage-widget",
+      "source": "./plugin/usage-widget",
+      "description": "Saves your Claude plan limits (5-hour and weekly) for the Claude Usage Widget.",
+      "category": "productivity"
+    }
+  ]
+}
