@@ -41,6 +41,9 @@ conversation.
 | Double-click | Switch between full and compact view |
 | Right-click, or the X | Close |
 
+The first time the widget runs it also adds a **Claude Usage** shortcut to your desktop, even if you start it
+without the installer (delete it and it won't come back).
+
 ## How it works
 
 - **Limits**: the `usage-widget` plugin hooks Claude Code's session start and every response, and writes the

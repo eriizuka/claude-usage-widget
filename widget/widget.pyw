@@ -92,7 +92,18 @@ class Widget:
         r.bind("<<Tick>>", lambda e: s.refresh())
         s.refresh(); r.after(50, s.round_corners)
         threading.Thread(target=s.ticker, daemon=True).start()
+        if not s.cfg.get("shortcut"): s.shortcut()
         r.mainloop()
+
+    def shortcut(s):
+        """First run: put a 'Claude Usage' shortcut on the desktop (only once, so deleting it sticks)."""
+        exe = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\\Claude Usage.lnk');"
+              f"$s.TargetPath='{exe if os.path.exists(exe) else sys.executable}';$s.Arguments='\"{os.path.abspath(__file__)}\"';$s.Save()")
+        try:
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True, creationflags=0x08000000, timeout=30)
+            s.cfg["shortcut"] = True; s.save()
+        except Exception: log(traceback.format_exc())
 
     def ticker(s):
         """Tk timers can stall after sleep: this thread asks for a refresh every 15 s and
