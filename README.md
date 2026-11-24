@@ -1,6 +1,6 @@
-<img src="docs/icon.png" width="96" align="right" alt="">
+<p align="center"><img src="docs/icon.png" width="112" alt="Claude Usage Widget logo"></p>
 
-# Claude Usage Widget
+<h1 align="center">Claude Usage Widget</h1>
 
 **Never hit your Claude limit by surprise again.**
 
