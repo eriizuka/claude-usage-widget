@@ -9,7 +9,7 @@ LIMITS, CFG, LOG = (os.path.join(DATA, n) for n in ("limits.json", "config.json"
 # US$ per million tokens (input, output, cache read); the first key contained in the model id wins
 PRICES = {"opus-5-5": (4, 20, .2), "sonnet-5-5": (2, 10, .1), "haiku-5-5": (.1, .5, .01), "fable-5-2": (8, 40, .2),
           "opus": (5, 25, .5), "sonnet": (2, 10, .2), "haiku": (1, 5, .1), "fable": (10, 50, 1)}
-SNAP_L, SNAP_R, SNAP_Y = 51, 27, 204  # snap buttons: centres, in px from the right edge / from the top
+SNAP_L, SNAP_R, SNAP_Y, SNAP_M = 51, 27, 204, 2  # snap buttons: centres, in px from the right edge / from the top
 CTX, STALE_MIN, SS = 400_000, 30, 3  # context window, limits stale after 30 min, supersampling
 BG, TRACK, WH, DIM, MUT = (14, 15, 20), (44, 46, 56), (255, 255, 255), (201, 205, 214), (138, 143, 153)
 # UI text in the Windows display language (English when it is not one of these)
@@ -143,8 +143,7 @@ class Widget:
             if abs(e.x - s.lbl.winfo_width() + cx * s.k) < 13 * s.k and abs(e.y - SNAP_Y * s.k) < 13 * s.k: s.snap(side)
     def snap(s, side):
         """Stick to the bottom-left or bottom-right corner of this monitor, just above the taskbar."""
-        l, t, r, b = s.work(); m, w, h = int(12 * s.k), s.r.winfo_width(), s.r.winfo_height()
-        s.cfg.update(x=l + m if side == "left" else r - w - m, y=b - h - m); s.draw(); s.save(); s.dx = None
+        s.cfg["snap"] = side; s.draw(); s.save(); s.dx = None  # draw() places it; both sizes stay in the corner
     def work(s):  # work area (screen minus taskbar) of the monitor the widget is on
         class MI(ctypes.Structure): _fields_ = [("cb", ctypes.c_ulong), ("mon", ctypes.c_long * 4), ("work", ctypes.c_long * 4), ("f", ctypes.c_ulong)]
         mi = MI(); mi.cb = ctypes.sizeof(MI)
@@ -152,7 +151,7 @@ class Widget:
         if not ctypes.windll.user32.GetMonitorInfoW(h, ctypes.byref(mi)): return 0, 0, s.r.winfo_screenwidth(), s.r.winfo_screenheight()
         return tuple(mi.work)
     def drag(s, e):
-        if s.dx is not None: s.r.geometry(f"+{e.x_root - s.dx}+{e.y_root - s.dy}")
+        if s.dx is not None: s.r.geometry(f"+{e.x_root - s.dx}+{e.y_root - s.dy}"); s.cfg["snap"] = None
     def save(s, e=None):
         s.r.update_idletasks(); s.cfg.update(x=s.r.winfo_x(), y=s.r.winfo_y())
         try:
@@ -161,7 +160,7 @@ class Widget:
         except OSError: pass
     def toggle(s, e):
         s.cfg["mode"] = "small" if s.cfg["mode"] == "big" else "big"
-        s.draw(anchor=(e.x_root, e.y_root)); s.save()
+        s.draw(anchor=None if s.cfg.get("snap") else (e.x_root, e.y_root)); s.save()
 
     def refresh(s):
         try:
@@ -183,6 +182,7 @@ class Widget:
         (l, t, sw, sh), w, h = s.work(), im.width, im.height
         x, y = (anchor[0] - w // 2, anchor[1] - h // 2) if anchor else \
             (sw - w - int(24 * s.k) if s.cfg["x"] is None else s.cfg["x"], int(32 * s.k) if s.cfg["y"] is None else s.cfg["y"])
+        if s.cfg.get("snap") and not anchor: x, y = l + SNAP_M if s.cfg["snap"] == "left" else sw - w - SNAP_M, sh - h - SNAP_M
         x, y = min(max(l, x), sw - w), min(max(t, y), sh - h)  # always on screen, never under the taskbar
         s.r.geometry(f"{w}x{h}+{x}+{y}"); s.cfg.update(x=x, y=y); s.r.lift()
 
