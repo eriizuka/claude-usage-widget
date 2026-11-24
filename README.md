@@ -1,13 +1,19 @@
 # Claude Usage Widget
 
-A small always-on-top Windows widget that shows how much of your Claude plan you have used.
+**Never hit your Claude limit by surprise again.**
 
-- **5-hour** and **weekly** plan limits, with time until reset
-- **Context** used by your latest Claude Code conversation
-- **Today's tokens** and an estimated API-equivalent cost
-- Two sizes: a full panel, or three compact rings (5h · W · C). Double-click to switch
-- Sharp at any display scale, green → yellow → red as you approach a limit
-- Warns when the limit numbers are stale (no Claude Code activity for 30 min)
+Claude Usage Widget keeps your plan usage in the corner of your screen, so you see where you stand before you
+start a big task, not halfway through it. No dashboards to open, no commands to type: one glance and you know.
+
+### Why you'll like it
+
+- 🎯 **Plan your work around your limits.** See your 5-hour and weekly usage and exactly when each one resets.
+- 🧠 **Know when to start fresh.** Watch your conversation's context fill up before it slows Claude down.
+- 💰 **See what your day is worth.** Today's tokens and their API-equivalent cost, updated as you work.
+- 👀 **Readable at a glance.** Green, yellow, red. Shrink it to three tiny rings or expand it for detail with a double-click.
+- 🪶 **Lightweight and out of the way.** Always on top, drag it anywhere, crisp on any display, starts with Windows.
+- 🔒 **100% local and private.** No account, no network calls, nothing leaves your computer.
+- ⚡ **Installs in one command.** Clone, run the installer, done.
 
 ## Requirements
 
