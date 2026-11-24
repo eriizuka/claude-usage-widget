@@ -26,7 +26,7 @@ Write-Host '3/4 Shortcuts'
 $shell = New-Object -ComObject WScript.Shell
 function New-Shortcut($path) {
     $s = $shell.CreateShortcut($path); $s.TargetPath = $pythonw; $s.Arguments = "`"$Widget`""
-    $s.WorkingDirectory = $Repo; $s.Description = 'Claude Usage Widget'; $s.Save()
+    $s.WorkingDirectory = $Repo; $s.IconLocation = (Join-Path $Repo 'widget\icon.ico'); $s.Description = 'Claude Usage Widget'; $s.Save()
 }
 New-Shortcut (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Claude Usage.lnk')
 if (-not $NoStartup) { New-Shortcut (Join-Path ([Environment]::GetFolderPath('Startup')) 'Claude Usage.lnk') }

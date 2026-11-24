@@ -84,7 +84,7 @@ def color(p): return (0, 230, 118) if p < 60 else (255, 214, 0) if p < 85 else (
 class Widget:
     def __init__(s):
         s.cfg = {"mode": "big", "x": None, "y": None, **read_json(CFG)}
-        r = s.r = tk.Tk(); r.overrideredirect(True); r.attributes("-topmost", True)
+        r = s.r = tk.Tk(); r.overrideredirect(True); r.iconbitmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")); r.attributes("-topmost", True)
         s.k = r.winfo_fpixels("1i") / 96  # screen scale
         s.lbl = tk.Label(r, bd=0, bg="black"); s.lbl.pack()
         for ev, fn in (("<ButtonPress-1>", s.press), ("<B1-Motion>", s.drag), ("<ButtonRelease-1>", s.save),
@@ -99,7 +99,8 @@ class Widget:
         """First run: put a 'Claude Usage' shortcut on the desktop (only once, so deleting it sticks)."""
         exe = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
         ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\\Claude Usage.lnk');"
-              f"$s.TargetPath='{exe if os.path.exists(exe) else sys.executable}';$s.Arguments='\"{os.path.abspath(__file__)}\"';$s.Save()")
+              f"$s.TargetPath='{exe if os.path.exists(exe) else sys.executable}';$s.Arguments='\"{os.path.abspath(__file__)}\"';"
+              f"$s.IconLocation='{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icon.ico')}';$s.Save()")
         try:
             subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True, creationflags=0x08000000, timeout=30)
             s.cfg["shortcut"] = True; s.save()

@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="96" align="right" alt="">
+
 # Claude Usage Widget
 
 **Never hit your Claude limit by surprise again.**
