@@ -9,6 +9,7 @@ LIMITS, CFG, LOG = (os.path.join(DATA, n) for n in ("limits.json", "config.json"
 # US$ per million tokens (input, output, cache read); the first key contained in the model id wins
 PRICES = {"opus-5-5": (4, 20, .2), "sonnet-5-5": (2, 10, .1), "haiku-5-5": (.1, .5, .01), "fable-5-2": (8, 40, .2),
           "opus": (5, 25, .5), "sonnet": (2, 10, .2), "haiku": (1, 5, .1), "fable": (10, 50, 1)}
+SNAP_L, SNAP_R, SNAP_Y = 51, 27, 204  # snap buttons: centres, in px from the right edge / from the top
 CTX, STALE_MIN, SS = 400_000, 30, 3  # context window, limits stale after 30 min, supersampling
 BG, TRACK, WH, DIM, MUT = (14, 15, 20), (44, 46, 56), (255, 255, 255), (201, 205, 214), (138, 143, 153)
 # UI text in the Windows display language (English when it is not one of these)
@@ -136,8 +137,22 @@ class Widget:
 
     def press(s, e):
         s.dx, s.dy = e.x_root - s.r.winfo_x(), e.y_root - s.r.winfo_y()
-        if s.cfg["mode"] == "big" and e.x > s.lbl.winfo_width() - 44 * s.k and e.y < 40 * s.k: s.save(); s.r.destroy()
-    def drag(s, e): s.r.geometry(f"+{e.x_root - s.dx}+{e.y_root - s.dy}")
+        if s.cfg["mode"] != "big": return
+        if e.x > s.lbl.winfo_width() - 44 * s.k and e.y < 40 * s.k: s.save(); s.r.destroy()
+        for side, cx in (("left", SNAP_L), ("right", SNAP_R)):  # snap buttons, bottom right of the panel
+            if abs(e.x - s.lbl.winfo_width() + cx * s.k) < 13 * s.k and abs(e.y - SNAP_Y * s.k) < 13 * s.k: s.snap(side)
+    def snap(s, side):
+        """Stick to the bottom-left or bottom-right corner of this monitor, just above the taskbar."""
+        l, t, r, b = s.work(); m, w, h = int(12 * s.k), s.r.winfo_width(), s.r.winfo_height()
+        s.cfg.update(x=l + m if side == "left" else r - w - m, y=b - h - m); s.draw(); s.save(); s.dx = None
+    def work(s):  # work area (screen minus taskbar) of the monitor the widget is on
+        class MI(ctypes.Structure): _fields_ = [("cb", ctypes.c_ulong), ("mon", ctypes.c_long * 4), ("work", ctypes.c_long * 4), ("f", ctypes.c_ulong)]
+        mi = MI(); mi.cb = ctypes.sizeof(MI)
+        h = ctypes.windll.user32.MonitorFromWindow(ctypes.windll.user32.GetParent(s.r.winfo_id()), 2)
+        if not ctypes.windll.user32.GetMonitorInfoW(h, ctypes.byref(mi)): return 0, 0, s.r.winfo_screenwidth(), s.r.winfo_screenheight()
+        return tuple(mi.work)
+    def drag(s, e):
+        if s.dx is not None: s.r.geometry(f"+{e.x_root - s.dx}+{e.y_root - s.dy}")
     def save(s, e=None):
         s.r.update_idletasks(); s.cfg.update(x=s.r.winfo_x(), y=s.r.winfo_y())
         try:
@@ -165,10 +180,10 @@ class Widget:
         im = (s.big if s.cfg["mode"] == "big" else s.small)(s.k * SS, s.d)
         im = im.resize((im.width // SS, im.height // SS), Image.LANCZOS)
         s.photo = ImageTk.PhotoImage(im); s.lbl.config(image=s.photo)
-        sw, sh, w, h = s.r.winfo_screenwidth(), s.r.winfo_screenheight(), im.width, im.height
+        (l, t, sw, sh), w, h = s.work(), im.width, im.height
         x, y = (anchor[0] - w // 2, anchor[1] - h // 2) if anchor else \
             (sw - w - int(24 * s.k) if s.cfg["x"] is None else s.cfg["x"], int(32 * s.k) if s.cfg["y"] is None else s.cfg["y"])
-        x, y = min(max(0, x), sw - w), min(max(0, y), sh - h - int(56 * s.k))  # always on screen
+        x, y = min(max(l, x), sw - w), min(max(t, y), sh - h)  # always on screen, never under the taskbar
         s.r.geometry(f"{w}x{h}+{x}+{y}"); s.cfg.update(x=x, y=y); s.r.lift()
 
     def big(s, k, D):
@@ -191,6 +206,12 @@ class Widget:
         y = 56 * k + 3 * 44 * k
         d.text((P, y - 2 * k), f"{TODAY}  {D['tok'] / 1e6:.1f}M tokens  ·  ~US$ {D['cost']:.2f}", font=font(10 * k), fill=DIM, anchor="lm")
         d.text((P, y + 15 * k), age_text(D["age"]) + "  ·  " + DBL, font=font(9 * k), fill=MUT, anchor="lm")
+        for side, cx in (("left", SNAP_L), ("right", SNAP_R)):  # monitor icon with the widget in that corner
+            x0, y0 = W - cx * k - 9 * k, SNAP_Y * k - 7 * k
+            d.rounded_rectangle([x0, y0, x0 + 18 * k, y0 + 14 * k], radius=2.5 * k, outline=DIM, width=int(1.4 * k))
+            d.line([x0 + 2 * k, y0 + 11 * k, x0 + 16 * k, y0 + 11 * k], fill=MUT, width=int(1.2 * k))  # taskbar
+            bx = x0 + 3 * k if side == "left" else x0 + 10 * k
+            d.rounded_rectangle([bx, y0 + 4.5 * k, bx + 5 * k, y0 + 9 * k], radius=1 * k, fill=WH)
         return im
 
     def small(s, k, D):

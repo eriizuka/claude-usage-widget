@@ -42,6 +42,7 @@ conversation.
 | --- | --- |
 | Drag | Move the widget (position is remembered) |
 | Double-click | Switch between full and compact view |
+| Corner buttons (bottom right) | Stick the widget to the bottom-left or bottom-right corner, just above the taskbar |
 | Right-click, or the X | Close |
 
 The first time the widget runs it also adds a **Claude Usage** shortcut to your desktop, even if you start it
