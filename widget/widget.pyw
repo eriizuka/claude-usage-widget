@@ -1,7 +1,8 @@
-"""Floating Claude usage widget. Drag to move, double-click to switch size, right-click to close."""
-import ctypes, datetime as dt, functools, glob, json, locale, os, subprocess, sys, threading, time, tkinter as tk, traceback
+"""Floating Claude usage widget for Windows and Linux. Drag to move, double-click to switch size, right-click to close."""
+import ctypes, datetime as dt, functools, glob, json, locale, os, shutil, subprocess, sys, threading, time, tkinter as tk, traceback
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
+WIN, HERE = sys.platform == "win32", os.path.dirname(os.path.abspath(__file__))
 PROJECTS = os.path.expanduser("~/.claude/projects")  # transcripts: tokens, cost and context
 DATA = os.path.expanduser("~/.claude-usage-widget")  # written by the plugin; also holds config and log
 os.makedirs(DATA, exist_ok=True)
@@ -12,12 +13,13 @@ PRICES = {"opus-5-5": (4, 20, .2), "sonnet-5-5": (2, 10, .1), "haiku-5-5": (.1, 
 SNAP_L, SNAP_R, SNAP_Y, SNAP_M = 51, 27, 204, 2  # snap buttons: centres, in px from the right edge / from the top
 CTX, STALE_MIN, SS = 400_000, 30, 3  # context window, limits stale after 30 min, supersampling
 BG, TRACK, WH, DIM, MUT = (14, 15, 20), (44, 46, 56), (255, 255, 255), (201, 205, 214), (138, 143, 153)
-# UI text in the Windows display language (English when it is not one of these)
+# UI text in the system display language (English when it is not one of these)
 STRINGS = {
     "en": ("5 hours", "Week", "Context", "Today", "resets in", "no limits yet", "limits just now", "limits {} old", "double-click: compact", "W"),
     "pt": ("5 horas", "Semana", "Contexto", "Hoje", "zera em", "limites sem dados", "limites agora", "limites de {} atrás", "2 cliques: compacto", "S"),
     "es": ("5 horas", "Semana", "Contexto", "Hoy", "reinicia en", "sin datos de límites", "límites ahora", "límites de hace {}", "doble clic: compacto", "S")}
-try: LANG = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage(), "en")[:2]
+try: LANG = (locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage(), "en") if WIN else
+              next((v for k in ("LC_ALL", "LC_MESSAGES", "LANG") if (v := os.environ.get(k))), "en"))[:2].lower()
 except Exception: LANG = "en"
 H5, WEEK, CONTEXT, TODAY, RESETS, NO_LIMITS, LIMITS_NOW, LIMITS_AGE, DBL, W = STRINGS.get(LANG, STRINGS["en"])
 try: ctypes.windll.shcore.SetProcessDpiAwareness(2)  # real pixels: no blur at 125%
@@ -83,9 +85,15 @@ def age_text(m):
     return NO_LIMITS if m is None else LIMITS_NOW if m < 1 else \
         LIMITS_AGE.format(f"{m // 60}h{m % 60:02d}" if m >= 60 else f"{m} min")
 
+@functools.lru_cache(maxsize=2)
+def font_file(bold):  # Segoe UI on Windows; on Linux whatever sans font fontconfig picks (DejaVu, Noto, ...)
+    if WIN: return "C:/Windows/Fonts/" + ("segoeuib.ttf" if bold else "segoeui.ttf")
+    try: return subprocess.run(["fc-match", "-f", "%{file}", "sans:bold" if bold else "sans"], capture_output=True, text=True, timeout=5).stdout
+    except Exception: return "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
+
 @functools.lru_cache(maxsize=32)
 def font(px, bold=False):
-    try: return ImageFont.truetype("C:/Windows/Fonts/" + ("segoeuib.ttf" if bold else "segoeui.ttf"), int(px))
+    try: return ImageFont.truetype(font_file(bold), int(px))
     except OSError: return ImageFont.load_default()
 
 def color(p): return (0, 230, 118) if p < 60 else (255, 214, 0) if p < 85 else (255, 23, 68)
@@ -93,23 +101,38 @@ def color(p): return (0, 230, 118) if p < 60 else (255, 214, 0) if p < 85 else (
 class Widget:
     def __init__(s):
         s.cfg = {"mode": "big", "x": None, "y": None, **read_json(CFG)}
-        r = s.r = tk.Tk(); r.overrideredirect(True); r.iconbitmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")); r.attributes("-topmost", True)
+        r = s.r = tk.Tk(className="claude-usage-widget"); r.overrideredirect(True); r.attributes("-topmost", True)
+        s.icon = ImageTk.PhotoImage(Image.open(os.path.join(HERE, "icon.png"))); r.iconphoto(True, s.icon)
         s.k = r.winfo_fpixels("1i") / 96  # screen scale
         s.lbl = tk.Label(r, bd=0, bg="black"); s.lbl.pack()
         for ev, fn in (("<ButtonPress-1>", s.press), ("<B1-Motion>", s.drag), ("<ButtonRelease-1>", s.save),
                        ("<Double-Button-1>", s.toggle), ("<Button-3>", lambda e: r.destroy())): s.lbl.bind(ev, fn)
         r.bind("<<Tick>>", lambda e: s.refresh())
-        s.refresh(); r.after(50, s.round_corners)
+        s.refresh()
+        if WIN: r.after(50, s.round_corners)
         threading.Thread(target=s.ticker, daemon=True).start()
         if not s.cfg.get("shortcut"): s.shortcut()
         r.mainloop()
 
     def shortcut(s):
         """First run: put a 'Claude Usage' shortcut on the desktop (only once, so deleting it sticks)."""
+        if not WIN:  # a .desktop launcher in the app menu and on the desktop
+            try:
+                entry = (f"[Desktop Entry]\nType=Application\nName=Claude Usage\nComment=Claude plan usage widget\n"
+                         f"Exec=\"{sys.executable}\" \"{os.path.abspath(__file__)}\"\nIcon={os.path.join(HERE, 'icon.png')}\nTerminal=false\nCategories=Utility;\n")
+                desk = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True, text=True).stdout.strip() if shutil.which("xdg-user-dir") else ""
+                for d in filter(None, (os.path.expanduser("~/.local/share/applications"), desk or os.path.expanduser("~/Desktop"))):
+                    if not os.path.isdir(d) and d.endswith("Desktop"): continue
+                    os.makedirs(d, exist_ok=True); f = os.path.join(d, "claude-usage-widget.desktop")
+                    with open(f, "w") as fh: fh.write(entry)
+                    os.chmod(f, 0o755)
+                s.cfg["shortcut"] = True; s.save()
+            except Exception: log(traceback.format_exc())
+            return
         exe = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
         ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\\Claude Usage.lnk');"
               f"$s.TargetPath='{exe if os.path.exists(exe) else sys.executable}';$s.Arguments='\"{os.path.abspath(__file__)}\"';"
-              f"$s.IconLocation='{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icon.ico')}';$s.Save()")
+              f"$s.IconLocation='{os.path.join(HERE, 'icon.ico')}';$s.Save()")
         try:
             subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True, creationflags=0x08000000, timeout=30)
             s.cfg["shortcut"] = True; s.save()
@@ -127,7 +150,7 @@ class Widget:
             except Exception: pass
             if now - s.last > 120:
                 log("no refresh for 2 min: relaunching the widget")
-                ctypes.windll.kernel32.CloseHandle(MUTEX)
+                release()
                 subprocess.Popen([sys.executable, os.path.abspath(__file__)]); os._exit(0)
 
     def round_corners(s):  # Windows 11 rounded corners, no light border
@@ -144,7 +167,12 @@ class Widget:
     def snap(s, side):
         """Stick to the bottom-left or bottom-right corner of this monitor, just above the taskbar."""
         s.cfg["snap"] = side; s.draw(); s.save(); s.dx = None  # draw() places it; both sizes stay in the corner
-    def work(s):  # work area (screen minus taskbar) of the monitor the widget is on
+    def work(s):  # work area (screen minus taskbar/panels) of the monitor the widget is on
+        if not WIN:  # X11: _NET_WORKAREA from the window manager, else the whole screen
+            try:
+                v = subprocess.run(["xprop", "-root", "_NET_WORKAREA"], capture_output=True, text=True, timeout=2).stdout
+                x, y, w, h = (int(n) for n in v.split("=")[1].replace(",", " ").split()[:4]); return x, y, x + w, y + h
+            except Exception: return 0, 0, s.r.winfo_screenwidth(), s.r.winfo_screenheight()
         class MI(ctypes.Structure): _fields_ = [("cb", ctypes.c_ulong), ("mon", ctypes.c_long * 4), ("work", ctypes.c_long * 4), ("f", ctypes.c_ulong)]
         mi = MI(); mi.cb = ctypes.sizeof(MI)
         h = ctypes.windll.user32.MonitorFromWindow(ctypes.windll.user32.GetParent(s.r.winfo_id()), 2)
@@ -228,5 +256,20 @@ class Widget:
         if stale: d.text((im.width / 2, 74 * k), age_text(D["age"]), font=font(9 * k, True), fill=(255, 214, 0), anchor="mm")
         return im
 
-MUTEX = ctypes.windll.kernel32.CreateMutexW(None, False, "ClaudeUsageWidget")
-if ctypes.windll.kernel32.GetLastError() != 183: Widget()  # 183: a widget is already open
+def single_instance():
+    """True if no other widget is open. Windows: a named mutex; Linux: a lock file (retried briefly so a relaunch
+    can wait for the old process to exit)."""
+    global LOCK
+    if WIN:
+        LOCK = ctypes.windll.kernel32.CreateMutexW(None, False, "ClaudeUsageWidget")
+        return ctypes.windll.kernel32.GetLastError() != 183  # 183: already exists
+    import fcntl
+    LOCK = open(os.path.join(DATA, ".lock"), "w")
+    for _ in range(20):
+        try: fcntl.flock(LOCK, fcntl.LOCK_EX | fcntl.LOCK_NB); return True
+        except OSError: time.sleep(0.25)
+    return False
+
+def release(): ctypes.windll.kernel32.CloseHandle(LOCK) if WIN else LOCK.close()
+
+if single_instance(): Widget()
