@@ -141,13 +141,19 @@ class Widget:
     def ticker(s):
         """Tk timers can stall after sleep: this thread asks for a refresh every 15 s and
         relaunches the widget if the window goes 2 min without one (time asleep does not count)."""
+        threading.Thread(target=s.watchdog, daemon=True).start()
+        while True:
+            time.sleep(15)
+            # blocks while the Tk thread is stuck, which is why the watchdog runs in a thread of its own
+            try: s.r.event_generate("<<Tick>>", when="tail")
+            except Exception: pass
+
+    def watchdog(s):
         prev = time.time()
         while True:
             time.sleep(15); now = time.time()
-            if now - prev > 60: s.last = now
+            if now - prev > 60: s.last = now  # the computer was asleep: give it time to catch up
             prev = now
-            try: s.r.event_generate("<<Tick>>", when="tail")
-            except Exception: pass
             if now - s.last > 120:
                 log("no refresh for 2 min: relaunching the widget")
                 release()
