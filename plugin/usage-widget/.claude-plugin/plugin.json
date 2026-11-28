@@ -1,6 +1,6 @@
 {
   "name": "usage-widget",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Saves your Claude plan limits (5-hour and weekly) to a local file for the Claude Usage Widget. No network, no UI.",
   "license": "MIT"
 }
